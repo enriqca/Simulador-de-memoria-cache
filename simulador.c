@@ -1,87 +1,84 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <stdint.h>
-
-#define MAX_LINES 1000
 
 typedef struct {
     uint32_t tag;
-    int valid;
-} CacheLine;
+    int valido;
+}Linha;
 
 typedef struct {
-    CacheLine *lines;
-    int size;
+    Linha *linhas;
+    int tamanho;
     int index;
-} CacheSet;
+} Grupo;
 
 typedef struct {
-    CacheSet *sets;
-    int num_sets;
-    int lines_per_set;
-} Cache;
+    Grupo *grupos;
+    int num_grupos;
+    int linhas_por_grupo;
+} MemoriaCache;
 
-void init_cache(Cache *cache, int total_size, int line_size, int lines_per_set) {
-    int num_lines = total_size / line_size;
-    cache->num_sets = num_lines / lines_per_set;
-    cache->lines_per_set = lines_per_set;
-    cache->sets = (CacheSet *)malloc(cache->num_sets * sizeof(CacheSet));
+void iniciar_memoria(MemoriaCache *cache, int tamanho_total, int tamanho_linha, int linhas_por_grupo) {
+    int numero_linhas = tamanho_total / tamanho_linha;
+    cache->num_grupos = numero_linhas / linhas_por_grupo;
+    cache->linhas_por_grupo = linhas_por_grupo;
+    cache->grupos = (Grupo *)malloc(cache->num_grupos * sizeof(Grupo));
 
-    for (int i = 0; i < cache->num_sets; i++) {
-        cache->sets[i].size = lines_per_set;
-        cache->sets[i].index = 0;
-        cache->sets[i].lines = (CacheLine *)malloc(lines_per_set * sizeof(CacheLine));
-        for (int j = 0; j < lines_per_set; j++) {
-            cache->sets[i].lines[j].valid = 0;
+    for (int i = 0; i < cache->num_grupos; i++) {
+        cache->grupos[i].tamanho = linhas_por_grupo;
+        cache->grupos[i].index = 0;
+        cache->grupos[i].linhas = (Linha *)malloc(linhas_por_grupo * sizeof(Linha));
+        for (int j = 0; j < linhas_por_grupo; j++) {
+            cache->grupos[i].linhas[j].valido = 0;
         }
     }
 }
 
-void free_cache(Cache *cache) {
-    for (int i = 0; i < cache->num_sets; i++) {
-        free(cache->sets[i].lines);
+void free_cache(MemoriaCache *cache) {
+    for (int i = 0; i < cache->num_grupos; i++) {
+        free(cache->grupos[i].linhas);
     }
-    free(cache->sets);
+    free(cache->grupos);
 }
 
-uint32_t get_tag(uint32_t address, int offset_bits, int index_bits) {
-    return address >> (offset_bits + index_bits);
+uint32_t get_tag(uint32_t endereco, int offset_bits, int index_bits) {
+    return endereco >> (offset_bits + index_bits);
 }
 
-int simulate_cache(Cache *cache, uint32_t address, int line_size, int index_bits) {
-    int offset_bits = __builtin_ctz(line_size);  // Calculate offset bits based on line size
-    int set_index = (address >> offset_bits) & ((1 << index_bits) - 1);
-    uint32_t tag = get_tag(address, offset_bits, index_bits);
-    CacheSet *set = &cache->sets[set_index];
+int simulate_cache(MemoriaCache *cache, uint32_t endereco, int tamanho_linha, int index_bits) {
+    int offset_bits = __builtin_ctz(tamanho_linha);  // Calculate offset bits based on line size
+    int set_index = (endereco >> offset_bits) & ((1 << index_bits) - 1);
+    uint32_t tag = get_tag(endereco, offset_bits, index_bits);
+    Grupo *grupo = &cache->grupos[set_index];
 
-    for (int i = 0; i < cache->lines_per_set; i++) {
-        if (set->lines[i].valid && set->lines[i].tag == tag) {
+    for (int i = 0; i < cache->linhas_por_grupo; i++) {
+        if (grupo->linhas[i].valido && grupo->linhas[i].tag == tag) {
             return 1; // Hit
         }
     }
 
     // Miss - Use FIFO replacement policy
-    CacheLine *line = &set->lines[set->index];
+    Linha *line = &grupo->linhas[grupo->index];
     line->tag = tag;
-    line->valid = 1;
-    set->index = (set->index + 1) % cache->lines_per_set;
+    line->valido = 1;
+    grupo->index = (grupo->index + 1) % cache->linhas_por_grupo;
 
     return 0; // Miss
 }
 
-void print_cache(Cache *cache, int line_size, FILE *output) {
-    fprintf(output, "================\n");
-    for (int i = 0; i < cache->num_sets * cache->lines_per_set; i++) {
-        int set_index = i / cache->lines_per_set;
-        int line_index = i % cache->lines_per_set;
-        CacheLine *line = &cache->sets[set_index].lines[line_index];
+void print_cache(MemoriaCache *cache, int tamanho_linha, FILE *saida) {
+    fprintf(saida, "================\n");
+    fprintf(saida, "IDX V ** ADDR **\n");
+    for (int i = 0; i < cache->num_grupos * cache->linhas_por_grupo; i++) {
+        int index_grupos = i / cache->linhas_por_grupo;
+        int index_linhas = i % cache->linhas_por_grupo;
+        Linha *linha = &cache->grupos[index_grupos].linhas[index_linhas];
 
-        fprintf(output, "%03d %d ", i, line->valid);
-        if (line->valid) {
-            fprintf(output, "0x%08X\n", line->tag);
-        } else {
-            fprintf(output, "\n");
-        }
+        fprintf(saida, "%03d %d ", i, linha->valido);
+        if (linha->valido) fprintf(saida, "0x%08X\n", linha->tag);
+        else fprintf(saida, "\n");
     }
 }
 
@@ -91,45 +88,45 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int cache_size = atoi(argv[1]);
-    int line_size = atoi(argv[2]);
-    int lines_per_set = atoi(argv[3]);
-    char *filename = argv[4];
+    int tamanho_cache = atoi(argv[1]);
+    int tamanho_linha = atoi(argv[2]);
+    int linhas_por_grupo = atoi(argv[3]);
+    char *arq_entrada = argv[4];
 
-    Cache cache;
-    init_cache(&cache, cache_size, line_size, lines_per_set);
+    MemoriaCache cache;
+    iniciar_memoria(&cache, tamanho_cache, tamanho_linha, linhas_por_grupo);
 
-    FILE *input = fopen(filename, "r");
-    if (!input) {
+    FILE *entrada = fopen(arq_entrada, "r");
+    if (!entrada) {
         perror("Erro ao abrir arquivo");
         return 1;
     }
 
-    FILE *output = fopen("output.txt", "w");
-    if (!output) {
+    FILE *saida = fopen("output.txt", "w");
+    if (!saida) {
         perror("Erro ao abrir arquivo de saída");
-        fclose(input);
+        fclose(entrada);
         return 1;
     }
 
-    uint32_t address;
+    uint32_t endereco;
     int hits = 0, misses = 0;
-    int index_bits = __builtin_ctz(cache.num_sets);  // Calculate index bits
+    int index_bits = __builtin_ctz(cache.num_grupos);  // Calculate index bits
 
-    while (fscanf(input, "%x", &address) != EOF) {
-        if (simulate_cache(&cache, address, line_size, index_bits)) {
+    while (fscanf(entrada, "%x", &endereco) != EOF) {
+        if (simulate_cache(&cache, endereco, tamanho_linha, index_bits)) {
             hits++;
         } else {
             misses++;
         }
-        print_cache(&cache, line_size, output);
+        print_cache(&cache, tamanho_linha, saida);
     }
 
-    fprintf(output, "#hits: %d\n", hits);
-    fprintf(output, "#miss: %d\n", misses);
+    fprintf(saida, "#hits: %d\n", hits);
+    fprintf(saida, "#miss: %d\n", misses);
 
-    fclose(input);
-    fclose(output);
+    fclose(entrada);
+    fclose(saida);
     free_cache(&cache);
 
     return 0;
