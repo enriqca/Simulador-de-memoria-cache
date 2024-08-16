@@ -76,8 +76,8 @@ void print_cache(MemoriaCache *cache, int tamanho_linha, FILE *saida) {
         int index_linhas = i % cache->linhas_por_grupo;
         Linha *linha = &cache->grupos[index_grupos].linhas[index_linhas];
 
-        fprintf(saida, "%03d %d ", i, linha->valido);
-        if (linha->valido) fprintf(saida, "0x%08X\n", linha->tag);
+        fprintf(saida, "%03d %d", i, linha->valido);
+        if (linha->valido) fprintf(saida, " 0x%08X\n", linha->tag);
         else fprintf(saida, "\n");
     }
 }
@@ -122,8 +122,8 @@ int main(int argc, char *argv[]) {
         print_cache(&cache, tamanho_linha, saida);
     }
 
-    fprintf(saida, "#hits: %d\n", hits);
-    fprintf(saida, "#miss: %d\n", misses);
+    fprintf(saida, "\n#hits: %d\n", hits);
+    fprintf(saida, "#miss: %d", misses);
 
     fclose(entrada);
     fclose(saida);
