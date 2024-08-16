@@ -54,3 +54,4 @@ dkms.conf
 # Test
 output.txt
 simulador
+.vscode

@@ -3,24 +3,25 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct { //Estrutura de uma linha da memoria cache
     uint32_t tag;
     int valido;
-}Linha;
+} Linha;
 
-typedef struct {
+typedef struct { // Estrutura de um grupo da memoria cache
     Linha *linhas;
     int tamanho;
     int index;
 } Grupo;
 
-typedef struct {
+typedef struct { // Estrutura da memoria cache
     Grupo *grupos;
     int num_grupos;
     int linhas_por_grupo;
 } MemoriaCache;
 
 void iniciar_memoria(MemoriaCache *cache, int tamanho_total, int tamanho_linha, int linhas_por_grupo) {
+    // Inicialização da memoria, calculo de linhas e grupos e alocacao de memoria
     int numero_linhas = tamanho_total / tamanho_linha;
     cache->num_grupos = numero_linhas / linhas_por_grupo;
     cache->linhas_por_grupo = linhas_por_grupo;
@@ -37,38 +38,36 @@ void iniciar_memoria(MemoriaCache *cache, int tamanho_total, int tamanho_linha, 
 }
 
 void free_cache(MemoriaCache *cache) {
+    //liberar memoria
     for (int i = 0; i < cache->num_grupos; i++) {
         free(cache->grupos[i].linhas);
     }
     free(cache->grupos);
 }
 
-uint32_t get_tag(uint32_t endereco, int offset_bits, int index_bits) {
-    return endereco >> (offset_bits + index_bits);
-}
-
 int simulate_cache(MemoriaCache *cache, uint32_t endereco, int tamanho_linha, int index_bits) {
-    int offset_bits = __builtin_ctz(tamanho_linha);  // Calculate offset bits based on line size
+    int offset_bits = __builtin_ctz(tamanho_linha);  // calcular offset pelo tamanho do endereco
     int set_index = (endereco >> offset_bits) & ((1 << index_bits) - 1);
-    uint32_t tag = get_tag(endereco, offset_bits, index_bits);
+    uint32_t tag = endereco >> (offset_bits);
     Grupo *grupo = &cache->grupos[set_index];
 
     for (int i = 0; i < cache->linhas_por_grupo; i++) {
         if (grupo->linhas[i].valido && grupo->linhas[i].tag == tag) {
-            return 1; // Hit
+            return 1; // retorna hit
         }
     }
 
-    // Miss - Use FIFO replacement policy
+    // em caso de miss, utilizar FIFO para substituicao
     Linha *line = &grupo->linhas[grupo->index];
     line->tag = tag;
     line->valido = 1;
     grupo->index = (grupo->index + 1) % cache->linhas_por_grupo;
 
-    return 0; // Miss
+    return 0; // retorna miss
 }
 
 void print_cache(MemoriaCache *cache, int tamanho_linha, FILE *saida) {
+    //imprimir memoria cache apos ler todos os enderecos
     fprintf(saida, "================\n");
     fprintf(saida, "IDX V ** ADDR **\n");
     for (int i = 0; i < cache->num_grupos * cache->linhas_por_grupo; i++) {
